@@ -4,9 +4,33 @@
 * ngram: https://huggingface.co/sleepyeldrazi/Qwen3.8-Flash-Next-GSQ-RCO-Q8_0-PLE-GGUF/tree/main
 * script: [launch_davidau_iq3s_q8ple_512k.sh](launch_davidau_iq3s_q8ple_512k.sh) · [apply_adaptive_mtp.py](apply_adaptive_mtp.py) · [scripts/decode_ctx_tps.py](scripts/decode_ctx_tps.py)
 
-单卡 4090 48G · strata 官方 tag `v0.2.2`（`strata --version` = 0.1.47）· ctx 524288 + `--rope-scaling yarn --rope-scale 2` ·
-`--kv k8v4` `--prefill 32768` `--resident-experts` `--pipeline-windows 2` 单流 · 旗杆 `6×16384` · 停放 `24576/12/18432/2560` ·
-bench tg 256 · runs 1 · thinking off · `when 2026-10-25T16:05:13` · GPU 解锁后
+单卡 4090 48G（`power.limit` 450 W = `max_limit`，即解锁态）· 两份表同机同脚本同模型，只差引擎版本 ·
+ctx 524288 + `--rope-scaling yarn --rope-scale 2` · `--kv k8v4` `--prefill 32768` `--spec 6` `--resident-experts`
+`--pipeline-windows 2` 单流 · 旗杆 `--prompt-cache 6 --prompt-cache-every 16384` ·
+停放 `--conversation-cache-mib 24576 --conversation-cache-slots 12 --conversation-cache-min-tokens 18432 --conversation-cache-min-free-mib 2560 --conversation-cache-park-gain 16384` ·
+bench tg 256 · runs 1 · thinking off · 每档 flush（json `flush_per_tier: true`）· `exact_tg: true` · `padding_ratio ≈ 0.954`
+
+## Strata `v0.2.7` · `strata --version` = 0.1.52 · `when 2026-10-28T14:34:21` · 解锁后
+
+```text
+  tier    code   human    math   multi      qa     rag  reason    role    stem   write     AVG  |     pre_s  pre_min   pre_tps
+------------------------------------------------------------------------------------------------------------------------------
+    8k   127.7   124.8   140.4   127.3   125.4   150.8   139.8   151.8   134.7   126.1   134.9  |       1.8     0.03      4434
+   32k   125.3   123.1   139.1   117.8   126.6   144.6   138.7   141.2   126.9   125.7   130.9  |       6.2     0.10      5089
+   64k   110.4   125.0   121.2   135.7   133.2   128.7   134.3   145.2   134.5   121.3   128.9  |      12.0     0.20      5215
+  128k   119.5   130.3   134.0   119.2   121.6   131.6   144.0   129.5   129.7   112.6   127.2  |      24.8     0.41      5039
+  200k   121.5   129.2   129.0   124.4   118.1   121.6   147.4   125.7   134.3   116.2   126.7  |      39.7     0.66      4919
+  256k   122.4   113.3   132.2   106.0   120.9   128.8   126.0   124.7   112.8   116.8   120.4  |      52.1     0.87      4800
+  384k   112.4   107.5   126.5   117.2   110.1   113.1   118.6   128.3   126.2   118.3   117.8  |      81.4     1.36      4611
+  512k    88.6   116.1   115.0   100.2   110.5   107.7   128.9   110.5   112.7   104.2   109.4  |     113.3     1.89      4410
+------------------------------------------------------------------------------------------------------------------------------
+   AVG   116.0   121.2   129.7   118.5   120.8   128.4   134.7   132.1   126.5   117.7   124.5
+------------------------------------------------------------------------------------------------------------------------------
+```
+
+原始数据 [results/strata0152_iq3_512.json](results/strata0152_iq3_512.json)。
+
+## Strata `v0.2.2` · `strata --version` = 0.1.47 · `when 2026-10-25T16:05:13` · 解锁后
 
 ```text
   tier    code   human    math   multi      qa     rag  reason    role    stem   write     AVG  |     pre_s  pre_min   pre_tps
@@ -24,6 +48,13 @@ bench tg 256 · runs 1 · thinking off · `when 2026-10-25T16:05:13` · GPU 解�
 ------------------------------------------------------------------------------------------------------------------------------
 ```
 
-解锁前同口径 decode AVG **113.8**（512K 档 108.5 / 整段冷读 118.0 s）→ 解锁 **+9.8%**。
-原始数据 [results/iq3-modeon.json](results/iq3-modeon.json)（解锁后）· [results/iq3-modeoff.json](results/iq3-modeoff.json)（解锁前）；
-重打这张表：`python3 scripts/render_result.py results/iq3-modeon.json`。
+原始数据 [results/iq3-modeon.json](results/iq3-modeon.json)（解锁后）· [results/iq3-modeoff.json](results/iq3-modeoff.json)（解锁前，`when 2026-10-25T15:29:14`，AVG **113.8** / 512K 档 108.5 / 整段冷读 118.0 s → 解锁 **+9.8%**）。
+
+## 读法
+
+`v0.2.2 → v0.2.7` 全表 decode AVG **124.9 → 124.5（-0.3%）**，逐档 **-3.4%（512K）~ +7.1%（200K）**；prefill 各档
+**4383/4402 → 4434/4410 tok/s**，512K 整段冷读 113.5 s → 113.3 s。**单卡 4090 上这一版基本持平**，
+和双 3080 上那次 decode +6.3% 不是一个结论（那份在 [strata-dual-3080-qwen-flash](https://github.com/Tlyer233/strata-dual-3080-qwen-flash)）。
+两份都是 `runs=1`，没估 run-to-run 波动，逐档符号别当结论。
+
+重打表：`python3 scripts/render_result.py results/<name>.json`。
