@@ -166,7 +166,7 @@ def main() -> int:
     # 采样整块钉死: 客户端 temperature/top_p/top_k/... 一律不认。
     # 靠本地补丁 serve/server.py 的 sampling_force 列表 (官方优先级 request 最高)。
     cfg["sampling"] = {
-        "temperature": 0.9,
+        "temperature": 1.0,
         "top_p": 0.95,
         "top_k": 20,
         "min_p": 0.0,
