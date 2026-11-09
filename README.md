@@ -51,6 +51,8 @@ bench tg 256 · runs 1 · thinking off · 每档 flush（json `flush_per_tier: t
 
 原始数据 [results/strata0158_iq3_512_dflash2.json](results/strata0158_iq3_512_dflash2.json)。
 
+DFlash2 pack = `qwen3.8-flash-next-dflash2.q8.pack`（760,353,792 B，**Q8**；Strata 口径 Q4_0 与 Q8 同速 -0.3%，Q4_0 只省内存，522,458,112 B）。
+
 ## Strata `v0.2.7` · `strata --version` = 0.1.52 · `when 2026-10-28T14:34:21` · 解锁后
 
 ```text
