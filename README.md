@@ -11,13 +11,14 @@ ctx 524288 + `--rope-scaling yarn --rope-scale 2` · `--kv k8v4` `--prefill 3276
 停放 `--conversation-cache-mib 24576 --conversation-cache-slots 1200 --conversation-cache-min-tokens 18432 --conversation-cache-min-free-mib 2560 --conversation-cache-park-gain 16384`（v0.2.7 / v0.2.2 两节当时是 `slots 12`，其余相同；停放不进本 bench 的 decode/prefill 计时）·
 bench tg 256 · runs 1 · thinking off · 每档 flush（json `flush_per_tier: true`）· `exact_tg: true` · `padding_ratio ≈ 0.954`
 
-## 本地补丁（v0.2.12 / engine 0.1.58，共 3 个）
+## 本地补丁（v0.2.12 / engine 0.1.58，共 4 个）
 
 1. **PLE #1233**（引擎 C++）：单 tensor PLE 场景兼容（`generate.cpp` `pg.tensors().size() == 1` 守卫）。
 2. **same-chat rewind**（引擎 C++）：重试/短 prompt（新 prompt 比停在的 live 短）回退到同会话最近的 rewind 点、不停放，**不整份删缓存**；日志 `same-chat rewind at N (root R); not parking`。
 3. **sampling_force**（`serve/server.py`，13 处）：钉死 `temperature=1.0 / top_p=0.95 / top_k=20` 等，客户端改不动；启动行 `sampling forced (the client cannot override)`。
 
-* 曾经的第 4 个补丁 **Codex 旁路**（serve 读 `strata_conversation` → 引擎 `conv=` 键位 + `drop_replaced`）已于 2026-11-09 **完全下线**：codex 迁到 Responses 直通路径（codex → magpie `as-sent` → Strata 原生 `/v1/responses`）后，该字段不再有任何客户端发送；源码与二进制均已还原（还原后 `conversation_cache_test` 4842 项通过）。
+4. **PR #4621 backport**（`serve/responses.py` +17 处 / `server.py` 2 hunk / `test_responses.py` +5 测试，纯 Python 不需重编）：认 codex 0.144+ 历史里的 `tool_search_call/tool_search_output` item（0.2.12/0.2.13/主干都不认识 → 400 `input items of type ... are not supported`）；diff 在姊妹仓 strata-dual-3080-qwen-flash 的 `patches/pr4621-responses-tool-search.diff`，上游合并前升级需复查。
+* 曾经的第 5 个（本地编号，上游 #782 之外）补丁 **Codex 旁路**（serve 读 `strata_conversation` → 引擎 `conv=` 键位 + `drop_replaced`）已于 2026-11-09 **完全下线**：codex 迁到 Responses 直通路径（codex → magpie `as-sent` → Strata 原生 `/v1/responses`）后，该字段不再有任何客户端发送；源码与二进制均已还原（还原后 `conversation_cache_test` 4842 项通过）。
 * 运行开关（非补丁）：三个 launch 脚本 `export STRATA_UNDECLARED_TOOL_CALLS=call`（Strata #4622）——模型叫错工具名时返回 tool_call 而非正文，Codex 以 unknown-tool 自行重试，回合不再静默终结。
 * 现默认参数（2026-11-09 起）：`--conversation-cache-slots 24`（原 1200）、`sampling.temperature 1.0`（原 0.9）；下方 bench 表为当时旧值所跑，停放不计入 decode/prefill 计时，结论不受影响。
 
