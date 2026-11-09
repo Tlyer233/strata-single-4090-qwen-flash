@@ -51,16 +51,18 @@ else
   if command -v systemctl >/dev/null 2>&1; then
     systemctl --user stop sglang-dspark 2>/dev/null || true
   fi
-  if [[ -x "$HAND/gpu-drain.sh" ]]; then
-    bash "$HAND/gpu-drain.sh"
+  if [[ ! -x "$HAND/gpu-drain.sh" ]]; then
+    echo "missing $HAND/gpu-drain.sh" >&2
+    exit 1
   fi
+  bash "$HAND/gpu-drain.sh"
   # 2026-10-28: 先杀 supervisor。serve/server.py 是进程看护，只 pkill 引擎它会把引擎原地复活
   #   （今天实测：nvfp4 那份 serve 的 python 活着 -> drain 之后它重启了自己的引擎，新起的 davidau 直接 OOM）
   pkill -f "[s]erve.server" 2>/dev/null || true
   sleep 2
   pkill -x strata 2>/dev/null || true
   pkill -x strata-vision 2>/dev/null || true
-  fuser -k 8000/tcp 8001/tcp 8080/tcp "${PORT}/tcp" 2>/dev/null || true
+  fuser -k 8000/tcp 8001/tcp 8080/tcp "${MODE_PROXY_PORT:-8010}/tcp" "${PORT}/tcp" 2>/dev/null || true
   sleep 2
   nvidia-smi --query-gpu=index,memory.used --format=csv,noheader >&2 || true
   if fuser "${PORT}/tcp" >/dev/null 2>&1; then
@@ -182,7 +184,7 @@ PROMPT_CACHE_EVERY="${PROMPT_CACHE_EVERY:-16384}"
 PROMPT_CACHE_SPREAD="${PROMPT_CACHE_SPREAD:-0}"
 PROMPT_CACHE_TAIL="${PROMPT_CACHE_TAIL:-0}"
 CONV_CACHE_MIB="${CONV_CACHE_MIB:-24576}"
-CONV_CACHE_SLOTS="${CONV_CACHE_SLOTS:-12}"
+CONV_CACHE_SLOTS="${CONV_CACHE_SLOTS:-1200}"
 CONV_CACHE_MIN_TOKENS="${CONV_CACHE_MIN_TOKENS:-18432}"
 CONV_CACHE_MIN_FREE_MIB="${CONV_CACHE_MIN_FREE_MIB:-2560}"
 CONV_CACHE_PARK_GAIN="${CONV_CACHE_PARK_GAIN:-16384}"
@@ -305,4 +307,12 @@ if [ "${JSON_ONLY:-0}" = 1 ]; then
   echo "JSON_ONLY=1: json 已按 parallel=${PARALLEL} 写好, 不启动引擎" >&2
   exit 0
 fi
+# --- 模式代理：flash-logic / flash-house / flash-curie -> qwen-flash-next ---
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+mkdir -p "$HERE/logs"
+pkill -f "[m]ode_proxy.py" 2>/dev/null || true
+MODE_PROXY_PORT="${MODE_PROXY_PORT:-8010}" MODE_PROXY_UPSTREAM_PORT="$PORT" \
+  setsid nohup python3 "$HERE/mode_proxy.py" >> "$HERE/logs/mode-proxy.log" 2>&1 &
+echo "mode proxy on 0.0.0.0:${MODE_PROXY_PORT:-8010} -> 127.0.0.1:$PORT" >&2
+
 exec bash "$RUN"

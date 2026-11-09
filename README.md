@@ -2,13 +2,54 @@
 
 * 模型: https://huggingface.co/DavidAU/Qwen3.8-Flash-Next-Abliterated-Uncensored-Turbo-Brilliance-50x-Reasoning-Instruct-GSQ-RCO-GGUF
 * ngram: https://huggingface.co/sleepyeldrazi/Qwen3.8-Flash-Next-GSQ-RCO-Q8_0-PLE-GGUF/tree/main
-* script: [launch_davidau_iq3s_q8ple_512k.sh](launch_davidau_iq3s_q8ple_512k.sh) · [apply_adaptive_mtp.py](apply_adaptive_mtp.py) · [scripts/decode_ctx_tps.py](scripts/decode_ctx_tps.py)
+* script: [launch_davidau_iq3s_q8ple_512k.sh](launch_davidau_iq3s_q8ple_512k.sh)（MTP） · [launch_davidau_iq3s_q8ple_dflash2_512k.sh](launch_davidau_iq3s_q8ple_dflash2_512k.sh)（DFlash2） · [apply_adaptive_mtp.py](apply_adaptive_mtp.py) · [scripts/decode_ctx_tps.py](scripts/decode_ctx_tps.py)
 
-单卡 4090 48G（`power.limit` 450 W = `max_limit`，即解锁态）· 两份表同机同脚本同模型，只差引擎版本 ·
-ctx 524288 + `--rope-scaling yarn --rope-scale 2` · `--kv k8v4` `--prefill 32768` `--spec 6` `--resident-experts`
-`--pipeline-windows 2` 单流 · 旗杆 `--prompt-cache 6 --prompt-cache-every 16384` ·
-停放 `--conversation-cache-mib 24576 --conversation-cache-slots 12 --conversation-cache-min-tokens 18432 --conversation-cache-min-free-mib 2560 --conversation-cache-park-gain 16384` ·
+单卡 4090 48G（`power.limit` 450 W = `max_limit`，即解锁态）· 四份表同机同模型：v0.2.12 那两份只差投机解码（MTP / DFlash2），v0.2.7 与 v0.2.2 只差引擎版本 ·
+ctx 524288 + `--rope-scaling yarn --rope-scale 2` · `--kv k8v4` `--prefill 32768` `--resident-experts`
+`--pipeline-windows 2` 单流 · MTP 用 `--spec 6`；DFlash2 用 `--draft dflash2 --draft-model <pack> --draft-fallback none --spec 6 --draft-conf 0.35`（不加载 MTP 层）·
+旗杆 `--prompt-cache 6 --prompt-cache-every 16384` ·
+停放 `--conversation-cache-mib 24576 --conversation-cache-slots 1200 --conversation-cache-min-tokens 18432 --conversation-cache-min-free-mib 2560 --conversation-cache-park-gain 16384`（v0.2.7 / v0.2.2 两节当时是 `slots 12`，其余相同；停放不进本 bench 的 decode/prefill 计时）·
 bench tg 256 · runs 1 · thinking off · 每档 flush（json `flush_per_tier: true`）· `exact_tg: true` · `padding_ratio ≈ 0.954`
+
+## Strata `v0.2.12` · `strata --version` = 0.1.58 · MTP · `when 2026-11-09T12:22:44` · 解锁后
+
+```text
+  tier    code   human    math   multi      qa     rag  reason    role    stem   write     AVG  |     pre_s  pre_min   pre_tps
+------------------------------------------------------------------------------------------------------------------------------
+    8k   119.2   137.4   152.8   135.3   134.3   150.0   145.2   142.1   140.8   122.8   138.0  |       1.7     0.03      4667
+   32k   126.0   118.4   150.9   141.2   129.1   149.4   135.7   137.9   139.4   129.3   135.7  |       5.8     0.10      5400
+   64k   117.4   124.9   145.2   121.3   138.9   139.3   144.8   142.8   138.8   120.2   133.4  |      11.4     0.19      5491
+  128k   115.7   115.9   144.5   128.8   126.1   136.3   146.8   153.2   136.9   124.0   132.8  |      23.4     0.39      5345
+  200k   112.4   123.1   138.5   113.9   119.4   145.4   131.6   134.4   125.8   124.3   126.9  |      37.5     0.62      5208
+  256k   106.8   131.5   135.6   129.1   117.1   139.2   120.4   147.7   127.1   105.5   126.0  |      49.3     0.82      5065
+  384k   107.9   105.6   137.4   119.2   110.8   139.6   133.0   111.9   129.6   120.9   121.6  |      77.0     1.28      4870
+  512k    95.8   111.9   129.7   117.5   104.0   117.9   128.8   117.7   123.5   107.1   115.4  |     107.7     1.79      4637
+------------------------------------------------------------------------------------------------------------------------------
+   AVG   112.7   121.1   141.8   125.8   122.5   139.6   135.8   136.0   132.7   119.3   128.7
+------------------------------------------------------------------------------------------------------------------------------
+```
+
+原始数据 [results/strata0158_iq3_512.json](results/strata0158_iq3_512.json)。
+
+## Strata `v0.2.12` · `strata --version` = 0.1.58 · DFlash2 · `when 2026-11-09T12:32:37` · 解锁后
+
+```text
+  tier    code   human    math   multi      qa     rag  reason    role    stem   write     AVG  |     pre_s  pre_min   pre_tps
+------------------------------------------------------------------------------------------------------------------------------
+    8k   140.1   137.8   141.9   132.3   138.2   142.3   150.8   140.1   147.7   139.6   141.1  |       1.7     0.03      4649
+   32k   136.1   132.5   142.9   124.7   128.4   152.2   129.3   132.2   152.7   137.0   136.8  |       5.8     0.10      5381
+   64k   113.8   123.0   129.0   133.6   137.3   146.4   135.1   149.1   138.0   126.4   133.2  |      11.4     0.19      5504
+  128k   129.5   142.0   137.6   126.7   129.9   158.2   123.5   128.9   147.5   126.5   135.0  |      23.5     0.39      5328
+  200k   118.0   140.3   138.5   132.5   120.3   134.9   127.5   136.2   131.2   115.2   129.5  |      37.6     0.63      5202
+  256k   102.7   128.8   138.9   128.7   118.7   138.7   135.6   123.9   127.7   116.5   126.0  |      49.4     0.82      5063
+  384k   114.6   128.0   123.0   110.9   112.8   143.6   129.3   126.3   105.8   117.4   121.2  |      77.2     1.29      4860
+  512k    88.7   101.8   118.6   112.0   107.1   120.1   108.5   121.5   125.0    99.6   110.3  |     107.8     1.80      4637
+------------------------------------------------------------------------------------------------------------------------------
+   AVG   117.9   129.3   133.8   125.2   124.1   142.1   129.9   132.3   134.4   122.3   129.1
+------------------------------------------------------------------------------------------------------------------------------
+```
+
+原始数据 [results/strata0158_iq3_512_dflash2.json](results/strata0158_iq3_512_dflash2.json)。
 
 ## Strata `v0.2.7` · `strata --version` = 0.1.52 · `when 2026-10-28T14:34:21` · 解锁后
 
@@ -52,9 +93,17 @@ bench tg 256 · runs 1 · thinking off · 每档 flush（json `flush_per_tier: t
 
 ## 读法
 
-`v0.2.2 → v0.2.7` 全表 decode AVG **124.9 → 124.5（-0.3%）**，逐档 **-3.4%（512K）~ +7.1%（200K）**；prefill 各档
-**4383/4402 → 4434/4410 tok/s**，512K 整段冷读 113.5 s → 113.3 s。**单卡 4090 上这一版基本持平**，
-和双 3080 上那次 decode +6.3% 不是一个结论（那份在 [strata-dual-3080-qwen-flash](https://github.com/Tlyer233/strata-dual-3080-qwen-flash)）。
-两份都是 `runs=1`，没估 run-to-run 波动，逐档符号别当结论。
+`v0.2.7 → v0.2.12`：全表 decode AVG **124.5 → 128.7（MTP，+3.4%）** / **129.1（DFlash2，+3.7%）**；
+MTP 逐档 **+2.3%（8K）~ +5.5%（512K）**，512K 档 109.4 → 115.4。prefill 同步抬了一档：8K **4434 → 4667 / 4649** tok/s，
+512K 整段冷读 **113.3 s → 107.7 s（MTP）/ 107.8 s（DFlash2）**。
+
+DFlash2 vs MTP（同一份 v0.2.12）：短上下文赢——8K **141.1 vs 138.0（+2.2%）**、32K 136.8 vs 135.7、128K 135.0 vs 132.8；
+长上下文掉头——384K **121.2 vs 121.6**、512K **110.3 vs 115.4（-4.4%）**；全表 AVG **129.1 vs 128.7（+0.3%）**。
+和 Strata 自己的口径一致：DFlash2 在 greedy 的代码/JSON 上快，在采样文本和长上下文 agent 轮次上慢。
+
+`v0.2.2 → v0.2.7` 当时是持平：AVG **124.9 → 124.5（-0.3%）**，逐档 **-3.4%（512K）~ +7.1%（200K）**；prefill 各档
+**4383/4402 → 4434/4410 tok/s**。这和双 3080 上那次 decode +6.3% 不是一个结论（那份在 [strata-dual-3080-qwen-flash](https://github.com/Tlyer233/strata-dual-3080-qwen-flash)）。
+
+四份都是 `runs=1`，没估 run-to-run 波动，逐档符号别当结论。
 
 重打表：`python3 scripts/render_result.py results/<name>.json`。
